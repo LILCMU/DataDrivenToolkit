@@ -7,8 +7,8 @@
   - For Windows 64 bit : [Download](https://github.com/nodemcu/nodemcu-flasher/blob/master/Win64/Release/ESP8266Flasher.exe?raw=true).
 
 **The latest firmware**
-  - [Go to download page](https://github.com/LILCMU/DataDrivenToolkit/releases/latest) the file named "*ddt_firmware_v(x).bin*"
-  - or [Download](https://github.com/LILCMU/DataDrivenToolkit/releases/download/v0.6/ddt_firmware_v0_6.bin)
+  - Go to [Latest release page](https://github.com/LILCMU/DataDrivenToolkit/releases/latest) then download the file named "*ddt_firmware_v(x).bin*"
+  - or [Download](https://github.com/LILCMU/DataDrivenToolkit/releases/download/v0.6/ddt_firmware_v0_6.bin) a firmware.
 
 **Updating firmware**
   1. Open NodeMCU Firmware Programmer (ESP8266Flasher.exe)
