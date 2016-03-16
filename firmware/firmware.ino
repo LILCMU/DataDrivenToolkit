@@ -36,6 +36,7 @@ long    lastConnectionTime  = 0;
 boolean lastConnected       = false;
 int     failedCounter       = 0;
 int     value               = 0;
+boolean countBlink           = 0;
 
 //SDcard
 boolean hasSDCard = false;
@@ -509,11 +510,19 @@ void clearHashmap(){
 }
 void tick (void)
 {
-  if (WiFi.status() == WL_CONNECTED)
+  if (WiFi.status() == WL_CONNECTED){
     ledToggle();
-    //handleRecordData("field1", (String) random(1024));
-//  debugPrint(dateTimeString());
-
+  } else {
+    
+    if (countBlink==1){
+      ledOn();
+    } else if (countBlink==2){
+      ledOff();
+    } else if (countBlink>3){
+      countBlink=0;
+    }
+    countBlink++;
+  }
   return;
 }
 
