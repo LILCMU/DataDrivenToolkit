@@ -6,9 +6,9 @@ For Windows 32 bit : [Download](https://github.com/nodemcu/nodemcu-flasher/blob/
 
 For Windows 64 bit : [Download](https://github.com/nodemcu/nodemcu-flasher/blob/master/Win64/Release/ESP8266Flasher.exe?raw=true).
 
-## History
+## Change Log
 
-**0.1**
+**0.5**
 
 - First release.
 - Features
