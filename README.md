@@ -8,7 +8,7 @@
 
 **The latest firmware**
   - [Go to download page](https://github.com/LILCMU/DataDrivenToolkit/releases/latest) the file named "*ddt_firmware_v(x).bin*"
-  - or [Download](https://github.com/LILCMU/DataDrivenToolkit/releases/download/v0.5/ddt_firmware_v0_5.bin)
+  - or [Download](https://github.com/LILCMU/DataDrivenToolkit/releases/download/v0.6/ddt_firmware_v0_6.bin)
 
 **Updating firmware**
   1. Open NodeMCU Firmware Programmer (ESP8266Flasher.exe)
