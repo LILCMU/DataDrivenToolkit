@@ -8,6 +8,13 @@ For Windows 64 bit : [Download](https://github.com/nodemcu/nodemcu-flasher/blob/
 
 ## Change Log
 
+**0.6**
+
+- Updated LED blinking (Wifi connection status).
+  - LED on is connecting to wifi.
+  - LED blinks quickly (every second) when wifi is connected.
+  - LED flashes slowly (every 2 seconds) when wifi is not connected.
+
 **0.5**
 
 - First release.
