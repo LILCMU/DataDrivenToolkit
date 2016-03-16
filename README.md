@@ -12,10 +12,13 @@
 
 **Updating firmware**
   1. Open NodeMCU Firmware Programmer (ESP8266Flasher.exe)
+      ![Program](https://raw.githubusercontent.com/LILCMU/DataDrivenToolkit/gh-pages/images/Operation.png)
   2. Select COM Port that connected to the board.
   2. Go to "**Config**" Tab.
-  3. Enter firmware filepath or select a firmware file (click the gear icon) at the first line.
+  3. Enter firmware filepath or select a firmware file ( click the icon <img src="https://raw.githubusercontent.com/LILCMU/DataDrivenToolkit/gh-pages/images/Setting.png" width="28" height="28"> ) at the first line.
+      ![Select a firmware](https://raw.githubusercontent.com/LILCMU/DataDrivenToolkit/gh-pages/images/Config.png)
   4. Back to "**Operation**" Tab and then click "**Flash**" button.
+      ![Select a firmware](https://raw.githubusercontent.com/LILCMU/DataDrivenToolkit/gh-pages/images/Success.png)
 
 ## Change Log
 
