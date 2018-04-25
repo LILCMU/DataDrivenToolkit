@@ -1,3 +1,4 @@
+
 //Wifi Settings
 String  wifi_ssid     = "";
 String  wifi_password = "";
@@ -24,26 +25,46 @@ void connectWifi(){
     delay(500);
     Serial.print(".");
 
-    if (wifi_counter++ >= 60){
+    if (wifi_counter++ >= 30){
       wifi_counter = 0;
       break;
     }
   }
 
   if (WiFi.status() == WL_CONNECTED){
+    
     debugPrint();
     debugPrint("\tWiFi connected");  
-    debugPrint("\tIP address: \n");
+    debugPrint("\tIP address: ");
     Serial.print(WiFi.localIP());
-    udp.begin(localPort);
-    //debugPrint("\t okok");
-    delay(200);
-    setTime(NTP_get());
+    debugPrint();
+    startSyncTime();
+    
   }
   
-  debugPrint(dateTimeString());
   ledOff();
   
+}
+
+void startSyncTime() {
+
+  // Show time
+//  if (timeStatus() != timeNotSet) {
+//    debugPrint(dateTimeString());
+//    return;
+//  }
+
+
+//  if (udp.available() ==0) {
+    udp.begin(localPort);
+    delay(300);
+//  }
+
+  debugPrint("Start sync time");
+  setSyncProvider(getNtpTime);
+  delay(200);
+  debugPrint(dateTimeString());
+
 }
 
 void checkEmptyWifiInfo(){
@@ -52,6 +73,7 @@ void checkEmptyWifiInfo(){
     wifi_ssid       = wifi_default_ssid;
     wifi_password   = wifi_default_password;
   }
+  
 }
 
 void saveWifi(String qsid, String qpass){
@@ -141,56 +163,35 @@ void readThingSpeakAPI(){
   ledOff();
 }
 
-long NTP_get(void)
+time_t getNtpTime()
 {
-//get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP); 
-
+  while (udp.parsePacket() > 0) ; // discard any previously received packets
+  Serial.println("Transmit NTP Request");
+  
+  // WiFi.hostByName(ntpServerName, timeServerIP); 
   sendNTPpacket(timeServerIP); // send an NTP packet to a time server
-  // wait to see if a reply is available
-  delay(1000);
-
-  int cb = udp.parsePacket();
-  if (!cb) {
-    force_update = 1;
-    Serial.println("no packet yet");
+  uint32_t beginWait = millis();
+  while (millis() - beginWait < 1500) {
+    int size = udp.parsePacket();
+    if (size >= NTP_PACKET_SIZE) {
+      Serial.println("Receive NTP Response");
+      udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+      unsigned long secsSince1900;
+      // convert four bytes starting at location 40 to a long integer
+      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
+      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+      secsSince1900 |= (unsigned long)packetBuffer[43];
+      return secsSince1900 - 2208988800UL + time_zone * SECS_PER_HOUR;
+    }
   }
-  else {
-    force_update = 0;
-  // Serial.print("packet received, length=");
-  // Serial.println(cb);
-  // We've received a packet, read the data from it
-  udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
-
-  //the timestamp starts at byte 40 of the received packet and is four bytes,
-  // or two words, long. First, esxtract the two words:
-
-  unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-  unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-  // combine the four bytes (two words) into a long integer
-  // this is NTP time (seconds since Jan 1 1900):
-  unsigned long secsSince1900 = highWord << 16 | lowWord;
-  // Serial.print("Seconds since Jan 1 1900 = " );
-  // Serial.println(secsSince1900);
-
-  // now convert NTP time into everyday time:
-  // Serial.print("Unix time = ");
-  // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
-  const unsigned long seventyYears = 2208988800UL;
-  // subtract seventy years:
-  epoch = secsSince1900 - seventyYears;
-  // // print Unix time:
-  debugPrint((String) epoch);
-  return epoch;
-
-  }
+  Serial.println("No NTP Response :-(");
+  return 0; // return 0 if unable to get the time
 }
 
-
 // send an NTP request to the time server at the given address
-unsigned long sendNTPpacket(IPAddress& address)
+void sendNTPpacket(IPAddress &address)
 {
-  Serial.println("sending NTP packet...");
   // set all bytes in the buffer to 0
   memset(packetBuffer, 0, NTP_PACKET_SIZE);
   // Initialize values needed to form NTP request
@@ -204,9 +205,8 @@ unsigned long sendNTPpacket(IPAddress& address)
   packetBuffer[13]  = 0x4E;
   packetBuffer[14]  = 49;
   packetBuffer[15]  = 52;
-
   // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
+  // you can send a packet requesting a timestamp:                 
   udp.beginPacket(address, 123); //NTP requests are to port 123
   udp.write(packetBuffer, NTP_PACKET_SIZE);
   udp.endPacket();

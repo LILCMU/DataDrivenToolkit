@@ -1,73 +1,67 @@
+
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <EEPROM.h>
 #include <SPI.h>
 #include <SD.h>
 #include <Ticker.h>
-#include <Time.h>
 #include <HashMap.h>
+#include <TimeLib.h> 
 
-#define time_zone 0
+#define firmware_v    1.0
+#define time_zone     0
 #define led_pin       16
 
-//Time variables
-unsigned long   epoch ;
-int             hh, mm, ss;
-int             force_update  = 1;
+// ------------ Time variables
 Ticker          second_tick;
 Ticker          second_tick2;
-unsigned int    localPort     = 2390;      // local port to listen for UDP packets
-IPAddress       timeServerIP; // time.nist.gov NTP server address
-const char*     ntpServerName = "time.nist.gov";
-const int       NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
+unsigned int    localPort             = 8888;      // local port to listen for UDP packets
+const char*     ntpServerName         = "time.nist.gov";
+IPAddress       timeServerIP(132, 163, 96, 1);    // time.nist.gov NTP server address
+
+const int       NTP_PACKET_SIZE     = 48; // NTP time stamp is in the first 48 bytes of the message
 byte            packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
+WiFiUDP         udp;
+unsigned int    countSynctime         = 0;
+
+// ------------ ThingSpeak Settings
+//char          thingSpeakAddress[]   = "api.thingspeak.com";
+char            thingSpeakAddress[]   = "data.learninginventions.org";
+int             thingSpeakPort        = 80;
+String          writeAPIKey           = "";
+const int       sendingInterval       = 1 * 1000;      // Time interval in milliseconds to update ThingSpeak (number of seconds * 1000 = interval)
+String          fieldAndValues        = "";
+
+// ------------ Variable Setup
+long            lastConnectionTime    = 0; 
+boolean         lastConnected         = false;
+int             failedCounter         = 0;
+int             value                 = 0;
+boolean         countBlink            = 0;
+
+// ------------ SDcard
+boolean         hasSDCard             = false;
+
+// ------------ GoGo constant
+const int       gogo_command          = 5;
+const int       gogo_wifi             = 218;
+const int       gogo_record           = 223;
 
 
-// ThingSpeak Settings
-//char    thingSpeakAddress[]   = "api.thingspeak.com";
-char      thingSpeakAddress[]   = "data.learninginventions.org";
-int       thingSpeakPort        = 80;
-String    writeAPIKey           = "";
-const int updateThingSpeakInterval = 1 * 1000;      // Time interval in milliseconds to update ThingSpeak (number of seconds * 1000 = interval)
-String    fieldAndValues         = "";
-
-// Variable Setup
-long    lastConnectionTime  = 0; 
-boolean lastConnected       = false;
-int     failedCounter       = 0;
-int     value               = 0;
-boolean countBlink           = 0;
-
-//SDcard
-boolean hasSDCard = false;
-
-// GoGo contant
-const int gogo_command  = 5;
-const int gogo_wifi     = 218;
-const int gogo_record   = 223;
-
-
-// A UDP instance to let us send and receive packets over UDP
-WiFiUDP udp;
-
-// Initialize Arduino Ethernet Client
+// ------------ Wifi
 WiFiClient client;
 
-//Hash
+// ------------ Hash and Storage
 //define the max size of the hashtable
-const byte HASH_SIZE        = 10; 
-//storage 
-HashType<char*,int> hashRawArray[HASH_SIZE]; 
+const byte            HASH_SIZE        = 10; 
+HashType<char*,int>   hashRawArray[HASH_SIZE]; 
 //handles the storage [search,retrieve,insert]
-HashMap<char*,int> hashMap = HashMap<char*,int>( hashRawArray , HASH_SIZE ); 
-bool isDataHandled          = false;
-byte hashMapSize            = 0;
+HashMap<char*,int>    hashMap = HashMap<char*,int>( hashRawArray , HASH_SIZE ); 
+bool                  isDataHandled          = false;
+byte                  hashMapSize            = 0;
 
-//
-String inputString = "";         // a string to hold incoming data
-boolean stringComplete = false;  // whether the string is complete
-
-String arr[20]={};
+String                inputString = "";         // a string to hold incoming data
+boolean               stringComplete = false;  // whether the string is complete
 
 void debugPrint(String msg=""){
   Serial.println(msg);
@@ -75,9 +69,8 @@ void debugPrint(String msg=""){
 
 void setup()
 {
-
   
-inputString.reserve(200);
+  inputString.reserve(200);
   
   delay(100);
   // Start Serial for debugging on the Serial Monitor
@@ -87,24 +80,20 @@ inputString.reserve(200);
   pinMode(led_pin,OUTPUT);
   //saveWifi("gogo", "");
   //Read wifi config from EEPROM
+  debugPrint("Firmware Version " + String(firmware_v));
   debugPrint();
   readThingSpeakAPI();
 
   //Connecting to a WiFi network
   connectWifi();
   delay(100);
-  //Sync time
+
   ledOn();
-  udp.begin(localPort);
 
   if (WiFi.status() == WL_CONNECTED){
-    setSyncProvider(NTP_get);
-    delay(100);
-    debugPrint("waiting for sync");
-    debugPrint(dateTimeString());
-    while(timeStatus() == timeNotSet)
-      ; // wait until the time is set by the sync provider
+    startSyncTime();
   }
+  
    //Initialize SD Card
   initSDCard(); 
   
@@ -129,40 +118,37 @@ void splitString(String longString){
     extractValue(cutString);
     longString = longString.substring(index+1);
   } while (index != -1);
+  
   extractValue(longString);
   
 }
+
 void loop()
 {
 
-/*
+  /*
   if (Serial.available()) {
     String inString = Serial.readString();
     extractValue(inString);
   }
-*/
+  */
   serialEvent(); //call the function
+  
   //handle the string when a newline arrives:
   if (stringComplete) {
 
     //check has more than 1 packet
 
     splitString(inputString);
-    /*if (inputString.lastIndexOf(",") != inputString.indexOf(",")){
-      
-    } else {
-      extractValue(inputString);
-    }
-    */
-    //
+
     // clear the string:
     inputString = "";
     stringComplete = false;
   }
   
 
-// Print Update Response to Serial Monitor
-/*
+  /*
+  // Print Update Response to Serial Monitor
   if (client.available())
   {
     while ( client.available() > 0 ) {
@@ -170,8 +156,8 @@ void loop()
       Serial.print(c);
     }
   }
-*/
-// Disconnect from ThingSpeak
+  */
+  
   if (!client.connected() && lastConnected)
   {
     debugPrint("...disconnected");
@@ -179,37 +165,33 @@ void loop()
     client.stop();
   }
 
-// Read value from Analog Input Pin 0
-//String strValue0 = (String) value ;
-//String analogValue0 = String(analogRead(A0), DEC);
+  // Read value from Analog Input Pin 0
+  //String strValue0 = (String) value ;
+  //String analogValue0 = String(analogRead(A0), DEC);
 
-// Update ThingSpeak
-
-if(!client.connected() && (millis() - lastConnectionTime > updateThingSpeakInterval))
-{
-  lastConnectionTime = millis();
-  //debugPrint("------------------------------");
-  //writeDataToSDCard(field, String(value));
-  if (WiFi.status() == WL_CONNECTED && fieldAndValues != ""){
-    if (updateThingSpeakGet(fieldAndValues)){
-      //clearHashmap();
-      debugPrint("ok");
-    } else {
-      debugPrint("not ok");
+  // Send data
+      if(!client.connected() && (millis() - lastConnectionTime > sendingInterval))
+  {
+    lastConnectionTime = millis();
+    // debugPrint("------------------------------");
+    // debugPrint(fieldAndValues);
+    
+    //writeDataToSDCard(field, String(value));
+    if (WiFi.status() == WL_CONNECTED && fieldAndValues != ""){
+      if (updateThingSpeakGet(fieldAndValues)){
+        //clearHashmap();
+        debugPrint("ok");
+      } else {
+        debugPrint("not ok");
+      }
+      clearHashmap();
+    } else if (WiFi.status() != WL_CONNECTED){
+      //ledToggle();
     }
-    clearHashmap();
-  } else if (WiFi.status() != WL_CONNECTED){
-    //ledToggle();
+
   }
+  delay(1);
   
-  
-  //updateThingSpeakGet("field1="+value);
-  //debug (value);
-  //if (value > 256) value = 0;
-  //value++;
-}
-
-
   //lastConnected = client.connected();
 }
 
@@ -262,26 +244,31 @@ int extractValue(String data){
 
     //Check type Data Logging
     if (data.charAt(1)== gogo_record ){
+      
       String  field = data.substring(2,firstComma);
       String  value = data.substring(firstComma+1);
       handleRecordData(field, value);
 
     //Check type Wifi Config
     } else if ( data.charAt(1)== gogo_wifi ){
+      
       String  inssid = data.substring(2,firstComma);
       String  inpass = data.substring(firstComma+1);
 
       //API setting
       if (inssid.equals("thingSpeakAPIKey")){
+        
         saveThingSpeakAPI(inpass);
         readThingSpeakAPI();
 
       } else {
+        
         debugPrint("SSID : " + inssid);
         debugPrint("Pass : " + inpass);
         saveWifi(inssid, inpass);
         debugPrint("------------------------------");
         connectWifi();
+        
       }
     }
   }
@@ -306,7 +293,7 @@ void handleRecordData(String field, String value){
   //hashMap[hashMapSize](fieldChar,true);
   writeDataToSDCard(field, value);
   if (indexOfField == 0 && hashMapSize < HASH_SIZE){
-     //arr[hashMapSize] = field;
+
      hashMap[++hashMapSize](fieldChar,value.toInt());
      //hashMapSize++;
      if (indexOfField < HASH_SIZE)
@@ -324,11 +311,11 @@ void handleRecordData(String field, String value){
   */
   //debugPrint("\tok");
   
-  String  fieldAndValue = field + "=" + value;
+  String  fieldAndValue = "&" + field + "=" + value;
   
-  if (hashMapSize > 0){
-    fieldAndValues += "&";
-  }
+//  if (hashMapSize > 0){
+//    fieldAndValues += "&";
+//  }
   fieldAndValues += fieldAndValue;
   //writeDataToSDCard(field, value);
   return;
@@ -353,15 +340,15 @@ boolean updateThingSpeakGet(String tsData)
   {
     String url = "/update?key=";
     url += writeAPIKey;
-    url += "&";
+    //url += "&";
     url += tsData;
 
-    //debugPrint(url);
+    // debugPrint(url);
     
-    client.print(String("GET ") + url + " HTTP/1.1\n");
-    client.print("Host: "+ String(thingSpeakAddress) +"\n");
-    //client.print("Host: api.thingspeak.com\n");
-    client.print("Connection: close\n");
+    client.print(String("GET ") + url + " HTTP/1.1\r\n");
+    client.print("Host: "+ String(thingSpeakAddress) +"\r\n");
+    //client.print("Host: api.thingspeak.com\r\n");
+    client.print("Connection: close\r\n");
     client.print("\r\n\r\n");
     String line = "";
     lastConnectionTime = millis();
@@ -373,16 +360,19 @@ boolean updateThingSpeakGet(String tsData)
       failedCounter = 0;
       
       while(!client.available()){ //Wait until response
+        delay(20);
+        Serial.print("+");
       }
 
       while(client.available()){ // Store the response msg to line
         line += (char)client.read();
+        delay(20);
+        Serial.print("-");
       }
       
       //debugPrint(line);
       int response = convertDataToInt(line);
       debugPrint(String (response) );
-      
       return (response > 0 );
     }
     else
@@ -411,15 +401,15 @@ boolean updateThingSpeak(String tsData)
 {
   if (client.connect(thingSpeakAddress, thingSpeakPort))
   {         
-    client.print("POST /update HTTP/1.1\n");
-    //client.print("Host: api.thingspeak.com\n");
-    client.print("Host: "+ String(thingSpeakAddress) +"\n");
-    client.print("Connection: close\n");
-    client.print("X-THINGSPEAKAPIKEY: "+writeAPIKey+"\n");
-    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("POST /update HTTP/1.1\r\n");
+    //client.print("Host: api.thingspeak.com\r\n");
+    client.print("Host: "+ String(thingSpeakAddress) +"\r\n");
+    client.print("Connection: close\r\n");
+    client.print("X-THINGSPEAKAPIKEY: "+writeAPIKey+"\r\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\r\n");
     client.print("Content-Length: ");
     client.print(tsData.length());
-    client.print("\n\n");
+    client.print("\r\n\r\n");
 
     client.print(tsData);
 
@@ -493,13 +483,21 @@ int convertDataToInt(String rawData){
   int responseLength;
   int responseVal;
 
-  //String dataSub = rawData.substring(rawData.indexOf("close")+9);
-  String dataSub = rawData.substring(rawData.indexOf("close")+47);
+  // Serial.println(rawData);
+
+  int indexContent = rawData.indexOf("close");
+  // debugPrint("index = ");
+  // debugPrint(String(indexContent));
+
+  // Invalid data
+  if (indexContent == -1) {
+    return 0;
+  }
+
+  //Get response number
+  String dataSub = rawData.substring(indexContent+47);
   dataSub.trim();
   responseVal = dataSub.toInt();
-  //responseLength = dataSub.substring(0,2).toInt();
-
-  //responseVal = dataSub.substring(3 , 3 + responseLength).toInt();
   return responseVal;
 }
 
@@ -508,10 +506,20 @@ void clearHashmap(){
   hashMap = HashMap<char*,int>( hashRawArray , HASH_SIZE );
   hashMapSize =0;
 }
+
 void tick (void)
 {
+  countSynctime++;
   if (WiFi.status() == WL_CONNECTED){
     ledToggle();
+
+    // Every (5 min *60)/0.5
+    if (countSynctime >= 120) {
+      countSynctime = 0;
+    // startSyncTime();
+      debugPrint(dateTimeString());
+    }
+    
   } else {
     
     if (countBlink==1){
@@ -538,6 +546,7 @@ void tick2 (void)
         debugPrint("ok");
       } else {
         debugPrint("not ok");
+        ESP.reset();
       }
       
       fieldAndValues = "";
