@@ -2,20 +2,17 @@
 
 String dateTimeString(){
 
+  unsigned long epoch =  timeClient.getEpochTime();
   String dateTime = "";
-
-  dateTime += year();
+  
+  dateTime += year(epoch);
   dateTime += "-";
-  dateTime += correctDigits(month());
+  dateTime += correctDigits(month(epoch));
   dateTime += "-";
-  dateTime += correctDigits(day());
+  dateTime += correctDigits(day(epoch));
   dateTime += " ";
-  dateTime += correctDigits(hour());
-  dateTime += ":";
-  dateTime += correctDigits(minute());
-  dateTime += ":";
-  dateTime += correctDigits(second());
-
+  dateTime += timeClient.getFormattedTime();
+  
   return dateTime;
 }
 
@@ -26,4 +23,7 @@ String correctDigits(int digits){
   return String(digits);
 }
 
+void showDateTime(){
+  debugPrint("Time\t "+dateTimeString());
+}
 
