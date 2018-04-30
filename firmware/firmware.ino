@@ -20,7 +20,8 @@ WiFiUDP         ntpUDP;
 NTPClient       timeClient(ntpUDP);
 unsigned int    countSynctime         = 0;
 unsigned int    timeSyncInterval      = 1*60*1000; // 5 min
-unsigned int    timeShowInterval      = 1*60*2; // 1 min
+//unsigned int    timeShowInterval      = 1*60*2; // 1 min
+unsigned int    timeShowInterval      = 10; // 1 min
 
 
 // ------------ ThingSpeak Settings
@@ -49,6 +50,9 @@ const int       gogo_record           = 223;
 
 // ------------ Wifi
 WiFiClient client;
+String          wifi_ssid             = "";
+String          wifi_password         = "";
+int             wifi_counter          = 0;
 
 // ------------ Hash and Storage
 //define the max size of the hashtable
@@ -332,7 +336,8 @@ boolean sendHTTPDataGet(String tsData) {
   HTTPClient http;
   lastConnectionTime = millis();
   String url = "http://data.learninginventions.org/update?key=" + writeAPIKey + tsData;
-   
+  Serial.println(url);
+
   http.begin(url);
   int httpCode = http.GET();
   
@@ -472,13 +477,13 @@ void clearHashmap(){
 void tick (void)
 {
   countSynctime++;
-  if (WiFi.status() == WL_CONNECTED){
-    ledToggle();
-    
-    if (countSynctime >= timeShowInterval) {
+      if (countSynctime >= timeShowInterval) {
       countSynctime = 0;
       showDateTime();
     }
+    
+  if (WiFi.status() == WL_CONNECTED){
+    ledToggle();
     
   } else {
     
