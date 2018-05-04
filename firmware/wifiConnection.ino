@@ -1,5 +1,5 @@
 
-//Wifi Settings
+//Wifi default settings
 String  wifi_default_ssid     = "gogo_ddw";
 String  wifi_default_password = "ddw_gogo";
 
@@ -40,6 +40,8 @@ void connectWifi(){
     // Start sync time
     timeClient.begin();
     
+  } else {
+    Serial.println();
   }
   
   ledOff();

@@ -1,3 +1,4 @@
+
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiUdp.h>
@@ -9,9 +10,9 @@
 #include <TimeLib.h> 
 #include <NTPClient.h>
 
-#define firmware_v    1.0
-#define time_zone     0
-#define led_pin       16
+#define FIRMWARE_V    1.0
+#define TIME_ZONE     0
+#define LED_PIN       16
 
 // ------------ Time variables
 Ticker          second_tick;
@@ -19,17 +20,18 @@ Ticker          second_tick2;
 WiFiUDP         ntpUDP;
 NTPClient       timeClient(ntpUDP);
 unsigned int    countSynctime         = 0;
-unsigned int    timeSyncInterval      = 1*60*1000; // 5 min
-//unsigned int    timeShowInterval      = 1*60*2; // 1 min
-unsigned int    timeShowInterval      = 10; // 1 min
-
+unsigned int    timeSyncInterval      = 5*60*1000; // 5 min
+unsigned int    timeShowInterval      = 1*60*2; // 1 min
+//unsigned int    timeShowInterval      = 10; // 1 min
+unsigned long   timeSaved             = 0;
 
 // ------------ ThingSpeak Settings
 //char          thingSpeakAddress[]   = "api.thingspeak.com";
 char            thingSpeakAddress[]   = "data.learninginventions.org";
 int             thingSpeakPort        = 80;
-String          writeAPIKey           = "";
-const int       sendingInterval       = 1 * 1000;      // Time interval in milliseconds to update ThingSpeak (number of seconds * 1000 = interval)
+// Time interval in milliseconds to send data (seconds * 1000)
+const int       sendingInterval       = 1 * 1000;  
+String          writeAPIKey           = "";    
 String          fieldAndValues        = "";
 
 // ------------ Variable Setup
@@ -84,28 +86,32 @@ void setup()
   Serial.begin(115200);
 
   EEPROM.begin(512);
-  pinMode(led_pin,OUTPUT);
+  pinMode(LED_PIN,OUTPUT);
+  ledOn();
   //saveWifi("gogo", "");
   //Read wifi config from EEPROM
-  debugPrint("Firmware Version " + String(firmware_v));
+  
   debugPrint();
+  debugPrint("Firmware Version " + String(FIRMWARE_V));
+  debugPrint();
+  updateTimeFromMem();
   readThingSpeakAPI();
 
+  //Initialize SD Card
+  initSDCard(); 
+    
   connectWifi();
   delay(100);
 
   ledOn();
 
-  if (WiFi.status() == WL_CONNECTED){
+//  if (WiFi.status() == WL_CONNECTED){
     // Start sync time
-    timeClient.begin();
-  }
-  
-   //Initialize SD Card
-  initSDCard(); 
+    timeClient.begin();   
+//  }
    
   inputString = "";
-
+  
   second_tick.attach(0.5, tick);
   //second_tick2.attach(5, tick2);
   
@@ -115,21 +121,6 @@ void setup()
 
   ledOff();
   debugPrint("Board\t Ready");
-}
-
-void splitString(String longString){
-  int index = -1;
-
-  do {
-    index = longString.indexOf('\n');
-    //debugPrint(String(index));
-    String cutString = longString.substring(0,index);
-    //debugPrint(cutString);
-    extractValue(cutString);
-    longString = longString.substring(index+1);
-  } while (index != -1);
-  
-  extractValue(longString);
 }
 
 void loop()
@@ -181,7 +172,7 @@ void loop()
   //String analogValue0 = String(analogRead(A0), DEC);
 
   // Send data
-      if(!client.connected() && (millis() - lastConnectionTime > sendingInterval))
+  if(!client.connected() && (millis() - lastConnectionTime > sendingInterval))
   {
     lastConnectionTime = millis();
     // debugPrint("------------------------------");
@@ -225,27 +216,30 @@ void serialEvent() {
 }
 
 void ledOn(){
-  digitalWrite(led_pin,LOW);
+  digitalWrite(LED_PIN,LOW);
 }
 
 void ledOff(){
-  digitalWrite(led_pin,HIGH);
+  digitalWrite(LED_PIN,HIGH);
 }
 
 void ledToggle(){
-  digitalWrite(led_pin, !digitalRead(led_pin));
+  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
 }
 
+void splitString(String longString){
+  int index = -1;
 
-void initSDCard(){
-  debugPrint("SDCard\t Initializing...");
-
-  if (!SD.begin(4)) {
-    debugPrint("SDCard\t initialization failed!");
-  } else {
-    hasSDCard = true;
-    debugPrint("SDCard\t initialization done.");
-  }
+  do {
+    index = longString.indexOf('\n');
+    //debugPrint(String(index));
+    String cutString = longString.substring(0,index);
+    //debugPrint(cutString);
+    extractValue(cutString);
+    longString = longString.substring(index+1);
+  } while (index != -1);
+  
+  extractValue(longString);
 }
 
 int extractValue(String data){
@@ -278,8 +272,8 @@ int extractValue(String data){
 
       } else {
         
-        debugPrint("SSID : " + inssid);
-        debugPrint("Pass : " + inpass);
+        debugPrint("DATA\t SSID\t " + inssid);
+        debugPrint("DATA\t PASS\t " + inpass);
         saveWifi(inssid, inpass);
         debugPrint("------------------------------");
         connectWifi();
@@ -330,13 +324,12 @@ boolean sendHTTPDataGet(String tsData) {
   tsData.trim();
   bool result = false;
   
-  Serial.printf("HTTP\t sending\t ");
+  debugPrintStart("HTTP\t sending\t ");
   debugPrint(tsData);
   
   HTTPClient http;
   lastConnectionTime = millis();
   String url = "http://data.learninginventions.org/update?key=" + writeAPIKey + tsData;
-  Serial.println(url);
 
   http.begin(url);
   int httpCode = http.GET();
@@ -411,39 +404,6 @@ boolean updateThingSpeak(String tsData)
     lastConnectionTime = millis(); 
   }
   return false;
-}
-
-void writeDataToSDCard(String data_name,String data_value){
-  if (!hasSDCard)
-    return;
-    
-  File myFile;
-  data_name.trim();
-  String fileName = data_name + ".csv";
-  //debugPrint((String) SD.exists(fileName));
-  /*if (!SD.exists(fileName)) {
-    debugPrint("create a file "+ fileName);
-    myFile = SD.open(fileName, FILE_WRITE);
-    if (myFile) {
-      myFile.println("DateTime," + data_name);
-      myFile.close();
-    }
-  }
-  */
-
-  myFile = SD.open(fileName, FILE_WRITE);
-
-  // if the file opened okay, write to it:
-  if (myFile) {
-    //debugPrint("Writing to "+ fileName);
-    myFile.println(dateTimeString() + "," + data_value);
-    myFile.close();
-
-  // if the file didn't open, print an error:
-  } else {
-    debugPrint("SDCard\t error opening " + fileName);
-  }
-  
 }
 
 int convertDataToInt(String rawData){
@@ -521,6 +481,4 @@ void tick2 (void)
   }
   return;
 }
-
-
 
